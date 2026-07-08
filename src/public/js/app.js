@@ -20,6 +20,7 @@ const TRANSLATIONS = {
     upload_browse_btn: 'Browse from Computer',
     // Buttons
     btn_view_grading: 'View Grading Scale',
+    btn_analyze_files: 'Analyze Selected PDFs',
     btn_calculate_gpa: 'Calculate GPA (Process)',
     btn_download_excel: 'Download Excel (.xlsx)',
     btn_reset_scale: 'Reset to Default Scale',
@@ -103,6 +104,7 @@ const TRANSLATIONS = {
     upload_browse_btn: 'පරිගණකයෙන් තෝරන්න',
     // Buttons
     btn_view_grading: 'Grading Scale එක බලන්න',
+    btn_analyze_files: 'තෝරාගත් PDF විශ්ලේෂණය කරන්න',
     btn_calculate_gpa: 'GPA ගණනය කරන්න (Process)',
     btn_download_excel: 'Excel Download කරන්න (.xlsx)',
     btn_reset_scale: 'Default Scale එකට සකසන්න',
@@ -186,6 +188,7 @@ const TRANSLATIONS = {
     upload_browse_btn: 'கணினியிலிருந்து தேர்ந்தெடுக்கவும்',
     // Buttons
     btn_view_grading: 'Grading Scale பார்க்கவும்',
+    btn_analyze_files: 'தேர்ந்தெடுக்கப்பட்ட PDFகளை பகுப்பாய்வு செய்யவும்',
     btn_calculate_gpa: 'GPA கணக்கிடவும் (Process)',
     btn_download_excel: 'Excel பதிவிறக்கம் (.xlsx)',
     btn_reset_scale: 'Default Scale ஆக மீட்டமைக்கவும்',
@@ -345,6 +348,7 @@ function setupLanguageSelector() {
 // ============================================================
 //  App State
 // ============================================================
+let accumulatedFiles = [];
 let parsedModules = [];
 let parsedStudents = [];
 let activeGradingScale = [];
@@ -508,10 +512,9 @@ function setupDragAndDrop() {
   });
 }
 
-// File selection checker (supports multiple files)
+// File selection checker (supports multiple files, appends incrementally)
 function handleFiles(files) {
-  const validFiles = [];
-  let totalSize = 0;
+  const incomingFiles = [];
   
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -519,52 +522,79 @@ function handleFiles(files) {
       showToast(t('toast_err_title'), `"${file.name}" ${t('toast_err_invalid_file')}`, 'error');
       return;
     }
-    validFiles.push(file);
-    totalSize += file.size;
+    incomingFiles.push(file);
   }
-  
+
+  // Add files to accumulatedFiles if they don't already exist by name
+  incomingFiles.forEach(file => {
+    const exists = accumulatedFiles.some(f => f.name === file.name);
+    if (!exists) {
+      accumulatedFiles.push(file);
+    } else {
+      showToast(t('toast_warn_duplicate'), `"${file.name}" ${t('toast_err_duplicate_file')}`, 'warning');
+    }
+  });
+
+  renderAccumulatedFiles();
+}
+
+function renderAccumulatedFiles() {
   const filesListContainer = document.getElementById('uploaded-files-list');
-  if (filesListContainer) {
-    filesListContainer.innerHTML = '';
-    if (validFiles.length > 0) {
-      filesListContainer.style.display = 'flex';
-      validFiles.forEach(f => {
-        const item = document.createElement('div');
-        item.className = 'uploaded-file-item';
-        item.innerHTML = `<i class="fa-solid fa-file-pdf"></i> <span>${f.name}</span>`;
-        filesListContainer.appendChild(item);
+  const btnAnalyze = document.getElementById('btn-analyze-files');
+  
+  if (!filesListContainer) return;
+  
+  filesListContainer.innerHTML = '';
+  
+  if (accumulatedFiles.length > 0) {
+    filesListContainer.style.display = 'flex';
+    accumulatedFiles.forEach((f, idx) => {
+      const item = document.createElement('div');
+      item.className = 'uploaded-file-item';
+      item.style.display = 'flex';
+      item.style.justifyContent = 'space-between';
+      item.style.alignItems = 'center';
+      item.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i>
+          <span>${f.name} <small style="opacity: 0.6;">(${(f.size / 1024 / 1024).toFixed(2)} MB)</small></span>
+        </div>
+        <button type="button" class="btn-remove-file" data-index="${idx}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center;">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      `;
+      filesListContainer.appendChild(item);
+    });
+    
+    // Add event listeners to delete buttons
+    filesListContainer.querySelectorAll('.btn-remove-file').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute('data-index'));
+        accumulatedFiles.splice(idx, 1);
+        renderAccumulatedFiles();
       });
+    });
+
+    // Update file info text
+    let totalSize = accumulatedFiles.reduce((acc, f) => acc + f.size, 0);
+    fileInfoText.style.display = 'flex';
+    if (accumulatedFiles.length === 1) {
+      fileInfoText.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${t('file_info_selected_single', { name: accumulatedFiles[0].name, size: (totalSize / 1024 / 1024).toFixed(2) })}`;
     } else {
-      filesListContainer.style.display = 'none';
+      fileInfoText.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${t('file_info_multiple', { n: accumulatedFiles.length, size: (totalSize / 1024 / 1024).toFixed(2) })}`;
     }
-  }
 
-  // Deduplicate files by name — prevent same file being selected twice
-  const seenNames = new Set();
-  const dedupedFiles = [];
-  for (const f of validFiles) {
-    if (!seenNames.has(f.name)) {
-      seenNames.add(f.name);
-      dedupedFiles.push(f);
-    } else {
-      showToast(t('toast_warn_duplicate'), `"${f.name}" ${t('toast_err_duplicate_file')}`, 'warning');
+    if (btnAnalyze) {
+      btnAnalyze.style.display = 'inline-flex';
     }
-  }
-
-  if (dedupedFiles.length === 0) return;
-  validFiles.length = 0;
-  dedupedFiles.forEach(f => validFiles.push(f));
-
-  if (validFiles.length === 0) return;
-  
-  fileInfoText.style.display = 'flex';
-  if (validFiles.length === 1) {
-    fileInfoText.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${t('file_info_selected_single', { name: validFiles[0].name, size: (totalSize / 1024 / 1024).toFixed(2) })}`;
   } else {
-    fileInfoText.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${t('file_info_multiple', { n: validFiles.length, size: (totalSize / 1024 / 1024).toFixed(2) })}`;
+    filesListContainer.style.display = 'none';
+    fileInfoText.style.display = 'none';
+    if (btnAnalyze) {
+      btnAnalyze.style.display = 'none';
+    }
   }
-  
-  uploadFiles(validFiles);
 }
 
 // Extract text from a single PDF file using pdf.js (client-side)
@@ -1035,6 +1065,16 @@ async function loadSamplePdf(type) {
 
 // Modal controls and Event listeners setup
 function setupEventListeners() {
+  // Analyze selected files
+  const btnAnalyze = document.getElementById('btn-analyze-files');
+  if (btnAnalyze) {
+    btnAnalyze.addEventListener('click', () => {
+      if (accumulatedFiles.length > 0) {
+        uploadFiles(accumulatedFiles);
+      }
+    });
+  }
+
   // Process credits form
   creditsForm.addEventListener('submit', handleProcessSubmit);
 
