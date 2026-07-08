@@ -1,35 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
 const marksController = require('../controllers/marksController');
 
-// Use memory storage so it works in serverless environments (Vercel)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  fileFilter: function (req, file, cb) {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext !== '.pdf') {
-      return cb(new Error('PDF ගොනු පමණක් upload කිරීමට අවසර ඇත (Only PDF files are allowed).'));
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB per file
-});
-
 // Routes
-router.post('/upload', (req, res, next) => {
-  upload.array('pdf', 10)(req, res, (err) => {
-    if (err instanceof multer.MulterError) {
-      return res.status(400).json({ error: `File upload error: ${err.message}` });
-    } else if (err) {
-      return res.status(400).json({ error: err.message });
+// Accept extracted PDF text (JSON) from client-side pdf.js parsing
+router.post('/upload', async (req, res) => {
+  try {
+    const { text, filename } = req.body;
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'PDF text content is missing or empty.' });
     }
-    next();
-  });
-}, marksController.uploadPdf);
+    await marksController.uploadTextContent(req, res, text, filename);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 router.post('/process', marksController.processMarks);
 router.post('/download', marksController.downloadExcel);

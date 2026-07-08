@@ -567,34 +567,114 @@ function handleFiles(files) {
   uploadFiles(validFiles);
 }
 
-// Upload multiple PDFs to server
+// Extract text from a single PDF file using pdf.js (client-side)
+async function extractTextFromPdf(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  
+  // Configure pdf.js worker
+  if (typeof pdfjsLib === 'undefined') {
+    throw new Error('PDF.js library not loaded. Please refresh the page.');
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  
+  const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+  const pdfDoc = await loadingTask.promise;
+  
+  let fullText = '';
+  for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    
+    // Group text items by Y-position to reconstruct lines
+    const itemsByY = {};
+    textContent.items.forEach(item => {
+      if (!item.str || item.str.trim() === '') return;
+      const y = Math.round(item.transform[5]);
+      if (!itemsByY[y]) itemsByY[y] = [];
+      itemsByY[y].push({ x: item.transform[4], str: item.str });
+    });
+    
+    // Sort by Y descending (top of page first), then X ascending (left to right)
+    const sortedYs = Object.keys(itemsByY).map(Number).sort((a, b) => b - a);
+    sortedYs.forEach(y => {
+      const lineItems = itemsByY[y].sort((a, b) => a.x - b.x);
+      const lineText = lineItems.map(i => i.str).join(' ');
+      fullText += lineText + '\n';
+    });
+  }
+  
+  return fullText;
+}
+
+// Upload multiple PDFs — extract text client-side, send text to server
 async function uploadFiles(files) {
   showLoader(t('loader_uploading'));
-  
-  const formData = new FormData();
-  files.forEach(file => {
-    formData.append('pdf', file);
-  });
 
   try {
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
+    const allModulesSet = new Set();
+    const combinedStudentsMap = {};
+    let totalProcessed = 0;
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.error || t('loader_uploading'));
+    for (const file of files) {
+      // Extract text client-side using pdf.js
+      let extractedText;
+      try {
+        extractedText = await extractTextFromPdf(file);
+      } catch (extractErr) {
+        console.error(`Failed to extract text from ${file.name}:`, extractErr);
+        throw new Error(`PDF text extraction failed for "${file.name}". Please ensure it is a valid, non-scanned PDF file.`);
+      }
+
+      if (!extractedText || extractedText.trim().length === 0) {
+        throw new Error(`"${file.name}" PDF file is empty or contains no readable text. Please use a text-based (non-scanned/image) PDF.`);
+      }
+
+      // Send extracted text to server for parsing
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: extractedText, filename: file.name })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to parse "${file.name}"`);
+      }
+
+      // Merge results
+      data.modules.forEach(mod => allModulesSet.add(mod));
+      data.students.forEach(student => {
+        const regNum = student.registrationNumber.toUpperCase();
+        if (!combinedStudentsMap[regNum]) {
+          combinedStudentsMap[regNum] = {
+            registrationNumber: regNum,
+            marks: {},
+            grades: {}
+          };
+        }
+        Object.assign(combinedStudentsMap[regNum].marks, student.marks || {});
+        if (student.grades) {
+          Object.assign(combinedStudentsMap[regNum].grades, student.grades);
+        }
+      });
+      totalProcessed++;
     }
 
-    // Reset all previous state before storing new parsed data
-    parsedModules = [];
-    parsedStudents = [];
-    processedResults = null;
+    // Reset and store new parsed data
+    parsedModules = Array.from(allModulesSet);
+    parsedStudents = Object.values(combinedStudentsMap);
 
-    parsedModules = data.modules;
-    parsedStudents = data.students;
+    // Ensure all students have all modules
+    parsedModules.forEach(mod => {
+      parsedStudents.forEach(student => {
+        if (student.marks[mod] === undefined) student.marks[mod] = 0;
+        if (!student.grades[mod]) student.grades[mod] = 'E';
+      });
+    });
+
+    processedResults = null;
 
     showToast(t('toast_success_title'), t('toast_success_upload', { modules: parsedModules.length, students: parsedStudents.length }), 'success');
     

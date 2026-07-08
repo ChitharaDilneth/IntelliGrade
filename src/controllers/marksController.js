@@ -1,5 +1,4 @@
-const fs = require('fs');
-const { parsePdfMarks } = require('../utils/pdfParser');
+const { parseTextMarks } = require('../utils/pdfParser');
 const { generateExcelReport } = require('../utils/excelGenerator');
 
 const defaultGradingScale = [
@@ -41,88 +40,23 @@ function getGpaByGradeName(gradeName, scale) {
 }
 
 /**
- * Handles PDF Upload and auto-identifies modules & students
+ * Handles text content upload from client-side PDF parsing (pdf.js in browser).
+ * Accepts { text, filename } JSON body instead of multipart PDF file.
  */
-async function uploadPdf(req, res) {
+async function uploadTextContent(req, res, text, filename) {
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'කරුණාකර PDF ගොනු (එකක් හෝ කිහිපයක්) තෝරන්න.' });
+    if (!text || text.trim().length === 0) {
+      return res.status(400).json({ error: 'PDF text content is empty.' });
     }
 
-    const allModulesSet = new Set();
-    const combinedStudentsMap = {};
-
-    // Deduplicate files by original filename (prevent same PDF being submitted twice)
-    const seenFilenames = new Set();
-    const uniqueFiles = req.files.filter(file => {
-      if (seenFilenames.has(file.originalname)) {
-        console.warn(`Duplicate file skipped: ${file.originalname}`);
-        return false;
-      }
-      seenFilenames.add(file.originalname);
-      return true;
-    });
-
-    // Process all unique files — use file.buffer (memoryStorage, Vercel-compatible)
-    for (const file of uniqueFiles) {
-      const pdfBuffer = file.buffer;
-      
-      const result = await parsePdfMarks(pdfBuffer, file.originalname);
-        
-      // Add modules to set
-      result.modules.forEach(mod => allModulesSet.add(mod));
-        
-      // Merge student records
-      result.students.forEach(student => {
-        const regNum = student.registrationNumber.toUpperCase();
-        if (!combinedStudentsMap[regNum]) {
-          combinedStudentsMap[regNum] = {
-            registrationNumber: regNum,
-            marks: {},
-            grades: {}
-          };
-        }
-        // Merge student marks
-        Object.assign(combinedStudentsMap[regNum].marks, student.marks);
-        // Merge student grades
-        if (student.grades) {
-          Object.assign(combinedStudentsMap[regNum].grades, student.grades);
-        }
-      });
-    }
-
-    const finalModules = Array.from(allModulesSet);
-    
-    // Ensure all students have all modules populated in their marks and grades (use E as default grade)
-    const finalStudents = Object.values(combinedStudentsMap).map(student => {
-      finalModules.forEach(mod => {
-        if (student.marks[mod] === undefined) {
-          student.marks[mod] = 0;
-        }
-        if (!student.grades) {
-          student.grades = {};
-        }
-        if (student.grades[mod] === undefined) {
-          student.grades[mod] = 'E';
-        }
-      });
-      return student;
-    });
+    const result = await parseTextMarks(text, filename || 'upload.pdf');
 
     return res.status(200).json({
-      message: `${req.files.length} PDF files processed successfully`,
-      modules: finalModules,
-      students: finalStudents
+      message: `PDF parsed successfully`,
+      modules: result.modules,
+      students: result.students
     });
   } catch (error) {
-    // Cleanup any remaining uploaded files in case of error
-    if (req.files) {
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          try { fs.unlinkSync(file.path); } catch (e) {}
-        }
-      });
-    }
     return res.status(500).json({ error: error.message });
   }
 }
@@ -249,7 +183,7 @@ async function downloadExcel(req, res) {
 }
 
 module.exports = {
-  uploadPdf,
+  uploadTextContent,
   processMarks,
   downloadExcel,
   defaultGradingScale

@@ -1,4 +1,5 @@
-const pdfParse = require('pdf-parse');
+// Use the internal module directly to avoid pdf-parse's test-at-require-time bug in serverless (Vercel)
+const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 const path = require('path');
 
 // Robust registration number regex; avoid matching short module codes like IT3010
@@ -9,7 +10,7 @@ function cleanText(text) {
 }
 
 /**
- * Extracts raw text from PDF buffer using standard pdf-parse.
+ * Extracts raw text from PDF buffer using pdf-parse.
  */
 async function extractTextWithPdfParse(pdfBuffer) {
   const data = await pdfParse(pdfBuffer);
@@ -17,72 +18,6 @@ async function extractTextWithPdfParse(pdfBuffer) {
     return data.text;
   }
   throw new Error("Empty text extracted by pdf-parse");
-}
-
-/**
- * Extracts raw text from PDF buffer using pdfjs-dist and reconstructs lines.
- * This is highly robust for tabular data where column chunks get scrambled.
- * Run page extraction in parallel using Promise.all for high performance.
- */
-async function extractTextWithPdfjs(pdfBuffer) {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(pdfBuffer),
-    useSystemFonts: true,
-    disableFontFace: true
-  });
-  const pdfDoc = await loadingTask.promise;
-  
-  const pagePromises = [];
-  for (let i = 1; i <= pdfDoc.numPages; i++) {
-    pagePromises.push((async (pageNumber) => {
-      const page = await pdfDoc.getPage(pageNumber);
-      const textContent = await page.getTextContent();
-      
-      // Group items by Y coordinate (baseline alignment)
-      const linesMap = {};
-      const threshold = 5; // points
-      
-      textContent.items.forEach(item => {
-        if (!item.str || item.str.trim() === '') return;
-        
-        const x = item.transform[4];
-        const y = item.transform[5];
-        
-        let foundKey = null;
-        for (const k of Object.keys(linesMap)) {
-          if (Math.abs(parseFloat(k) - y) < threshold) {
-            foundKey = k;
-            break;
-          }
-        }
-        
-        if (foundKey === null) {
-          foundKey = y.toString();
-          linesMap[foundKey] = [];
-        }
-        
-        linesMap[foundKey].push({ str: item.str, x });
-      });
-      
-      // Sort lines top to bottom (Y descending)
-      const sortedYKeys = Object.keys(linesMap).sort((a, b) => parseFloat(b) - parseFloat(a));
-      
-      let pageText = '';
-      sortedYKeys.forEach(y => {
-        const lineItems = linesMap[y];
-        // Sort items left to right (X ascending)
-        lineItems.sort((a, b) => a.x - b.x);
-        
-        const lineText = lineItems.map(item => item.str).join(' ');
-        pageText += lineText + '\n';
-      });
-      return pageText;
-    })(i));
-  }
-  
-  const pagesText = await Promise.all(pagePromises);
-  return pagesText.join('\n');
 }
 
 /**
@@ -319,49 +254,29 @@ function parseSliitFormat(text, lines) {
 }
 
 /**
- * Parses marks PDF and automatically extracts module names/codes and student marks.
- * It first tries parsing the standard pdf-parse extraction.
- * If that yields zero students (due to column scrambling), it falls back to pdfjs-dist line reconstruction.
- * 
+ * Parses marks from pre-extracted text string (used by client-side pdf.js flow).
+ * Accepts raw text extracted by pdf.js in the browser and runs all parsing strategies.
  * If the parsed PDF has exactly 1 module, we override the module name with the original filename (without extension).
  */
-async function parsePdfMarks(pdfBuffer, filename) {
-  let result = null;
-  
-  // Method 1: Try standard pdf-parse first
-  try {
-    const text = await extractTextWithPdfParse(pdfBuffer);
-    const lines = cleanText(text);
-    
-    // Try formats
-    result = parseSliitFormat(text, lines);
-    if (!result || result.students.length === 0) {
-      result = parseTabularFormat(lines);
-    }
-    if (!result || result.students.length === 0) {
-      result = parseBlockFormat(lines);
-    }
-  } catch (err) {
-    console.warn("pdf-parse extraction or parsing failed, trying pdfjs-dist...", err.message);
+async function parseTextMarks(text, filename) {
+  if (!text || text.trim().length === 0) {
+    throw new Error("Empty text provided for parsing.");
   }
   
-  // Method 2: Fallback to pdfjs-dist line reconstruction
-  if (!result || !result.students || result.students.length === 0) {
-    try {
-      const text = await extractTextWithPdfjs(pdfBuffer);
-      const lines = cleanText(text);
-      
-      // Try formats
-      result = parseSliitFormat(text, lines);
-      if (!result || result.students.length === 0) {
-        result = parseTabularFormat(lines);
-      }
-      if (!result || result.students.length === 0) {
-        result = parseBlockFormat(lines);
-      }
-    } catch (err) {
-      console.error("pdfjs-dist extraction or parsing failed too:", err);
-    }
+  const lines = cleanText(text);
+  let result = null;
+  
+  // Try SLIIT format first (space-separated student IDs with grades)
+  result = parseSliitFormat(text, lines);
+  
+  // Try tabular format (registration numbers with marks on same line)
+  if (!result || result.students.length === 0) {
+    result = parseTabularFormat(lines);
+  }
+  
+  // Try block format (student per block with module: mark pairs)
+  if (!result || result.students.length === 0) {
+    result = parseBlockFormat(lines);
   }
   
   if (!result || !result.students || result.students.length === 0) {
@@ -373,10 +288,7 @@ async function parsePdfMarks(pdfBuffer, filename) {
     const originalMod = result.modules[0];
     const newMod = path.basename(filename, path.extname(filename)).trim();
     
-    // Override modules list
     result.modules[0] = newMod;
-    
-    // Update mapping keys inside students array
     result.students.forEach(student => {
       if (student.marks && student.marks[originalMod] !== undefined) {
         student.marks[newMod] = student.marks[originalMod];
@@ -393,6 +305,6 @@ async function parsePdfMarks(pdfBuffer, filename) {
 }
 
 module.exports = {
-  parsePdfMarks,
+  parseTextMarks,
   REG_NO_REGEX
 };
