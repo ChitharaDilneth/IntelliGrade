@@ -31,8 +31,8 @@ const TRANSLATIONS = {
     // Analytics
     gpa_distribution: 'GPA Distribution (GPA Ranges)',
     performance_levels: 'Special Performance Levels',
-    gpa_above_30: 'Students above GPA 3.0',
-    gpa_above_27: 'Students above GPA 2.7',
+    gpa_above_30: 'GPA 3.0 or above',
+    gpa_above_27: 'GPA 2.7 or above',
     // Table
     table_no: 'No.',
     table_reg_no: 'Registration Number',
@@ -114,8 +114,8 @@ const TRANSLATIONS = {
     // Analytics
     gpa_distribution: 'GPA ව්‍යාප්තිය (GPA Ranges)',
     performance_levels: 'විශේෂ කාර්ය සාධන මට්ටම්',
-    gpa_above_30: 'GPA 3.0 ට වැඩි සිසුන්',
-    gpa_above_27: 'GPA 2.7 ට වැඩි සිසුන්',
+    gpa_above_30: 'GPA 3.0 හෝ ඊට වැඩි සිසුන්',
+    gpa_above_27: 'GPA 2.7 හෝ ඊට වැඩි සිසුන්',
     // Table
     table_no: 'අනු අංකය',
     table_reg_no: 'ලියාපදිංචි අංකය',
@@ -197,8 +197,8 @@ const TRANSLATIONS = {
     // Analytics
     gpa_distribution: 'GPA விநியோகம் (GPA வரம்புகள்)',
     performance_levels: 'சிறப்பு செயல்திறன் நிலைகள்',
-    gpa_above_30: 'GPA 3.0 க்கு மேல் மாணவர்கள்',
-    gpa_above_27: 'GPA 2.7 க்கு மேல் மாணவர்கள்',
+    gpa_above_30: 'GPA 3.0 அல்லது அதற்கு மேல்',
+    gpa_above_27: 'GPA 2.7 அல்லது அதற்கு மேல்',
     // Table
     table_no: 'வ.எண்',
     table_reg_no: 'பதிவு எண்',
@@ -586,20 +586,41 @@ async function extractTextFromPdf(file) {
     const page = await pdfDoc.getPage(pageNum);
     const textContent = await page.getTextContent();
     
-    // Group text items by Y-position to reconstruct lines
-    const itemsByY = {};
+    // Group text items by Y-position with a threshold (robust line reconstruction)
+    const linesMap = {};
+    const threshold = 5; // points (same as the original backend fallback logic)
+    
     textContent.items.forEach(item => {
       if (!item.str || item.str.trim() === '') return;
-      const y = Math.round(item.transform[5]);
-      if (!itemsByY[y]) itemsByY[y] = [];
-      itemsByY[y].push({ x: item.transform[4], str: item.str });
+      
+      const x = item.transform[4];
+      const y = item.transform[5];
+      
+      let foundKey = null;
+      for (const k of Object.keys(linesMap)) {
+        if (Math.abs(parseFloat(k) - y) < threshold) {
+          foundKey = k;
+          break;
+        }
+      }
+      
+      if (foundKey === null) {
+        foundKey = y.toString();
+        linesMap[foundKey] = [];
+      }
+      
+      linesMap[foundKey].push({ str: item.str, x });
     });
     
-    // Sort by Y descending (top of page first), then X ascending (left to right)
-    const sortedYs = Object.keys(itemsByY).map(Number).sort((a, b) => b - a);
-    sortedYs.forEach(y => {
-      const lineItems = itemsByY[y].sort((a, b) => a.x - b.x);
-      const lineText = lineItems.map(i => i.str).join(' ');
+    // Sort lines top to bottom (Y descending)
+    const sortedYKeys = Object.keys(linesMap).sort((a, b) => parseFloat(b) - parseFloat(a));
+    
+    sortedYKeys.forEach(y => {
+      const lineItems = linesMap[y];
+      // Sort items left to right (X ascending)
+      lineItems.sort((a, b) => a.x - b.x);
+      
+      const lineText = lineItems.map(item => item.str).join(' ');
       fullText += lineText + '\n';
     });
   }
@@ -791,7 +812,7 @@ async function handleProcessSubmit(e) {
 function updateDashboardStats(students) {
   const total = students.length;
   
-  // 1. Pass vs Fail count
+  // 1. Pass vs Fail count: Fail is C- or lower (inclusive of C-), Pass is C or higher for all subjects
   const failGrades = ['C-', 'D+', 'D', 'E', 'F'];
   let passedCount = 0;
   let failedCount = 0;
@@ -799,7 +820,12 @@ function updateDashboardStats(students) {
   students.forEach(student => {
     let failed = false;
     if (student.grades) {
-      failed = Object.values(student.grades).some(g => failGrades.includes(g.grade));
+      failed = Object.values(student.grades).some(g => {
+        const gradeName = (g.grade || '').toUpperCase().trim();
+        const gradeGp = parseFloat(g.gpa || g.gpa === 0 ? g.gpa : 2.0);
+        // Fail if grade is in fail list or grade point is less than C (2.0)
+        return failGrades.includes(gradeName) || gradeGp < 2.0;
+      });
     }
     if (failed) {
       failedCount++;
@@ -820,7 +846,7 @@ function updateDashboardStats(students) {
   let count25_30 = 0;
   let count20_25 = 0;
   
-  // GPA thresholds
+  // GPA thresholds: inclusive (>= 3.0 and >= 2.7)
   let countAbove30 = 0;
   let countAbove27 = 0;
 
@@ -831,8 +857,8 @@ function updateDashboardStats(students) {
     else if (gpa >= 2.5 && gpa < 3.0) count25_30++;
     else if (gpa >= 2.0 && gpa < 2.5) count20_25++;
 
-    if (gpa > 3.0) countAbove30++;
-    if (gpa > 2.7) countAbove27++;
+    if (gpa >= 3.0) countAbove30++;
+    if (gpa >= 2.7) countAbove27++;
   });
 
   // Update GPA counts
