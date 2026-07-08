@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IntelliGrade — Exam Module Marks Processing & GPA Analyzer</title>
+  <meta name="description" content="IntelliGrade — An advanced PDF exam marks processor and GPA calculator with beautiful glassmorphism dark theme and Excel generation.">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Ambient background glow elements -->
+  <div class="ambient-glow-container">
+    <div class="glow-blob blob-1"></div>
+    <div class="glow-blob blob-2"></div>
+    <div class="glow-blob blob-3"></div>
+  </div>
+
+  <!-- Language Selector (Top Right) -->
+  <div class="lang-selector-wrapper" id="lang-selector-wrapper">
+    <button class="lang-btn" id="lang-btn" aria-label="Select Language">
+      <i class="fa-solid fa-globe"></i>
+      <span id="lang-current-label">English</span>
+      <i class="fa-solid fa-chevron-down lang-chevron" id="lang-chevron"></i>
+    </button>
+    <div class="lang-dropdown" id="lang-dropdown">
+      <button class="lang-option active" data-lang="en" id="opt-en">
+        <span class="lang-flag">🇬🇧</span>
+        <span>English</span>
+        <i class="fa-solid fa-check lang-check"></i>
+      </button>
+      <button class="lang-option" data-lang="si" id="opt-si">
+        <span class="lang-flag">🇱🇰</span>
+        <span>සිංහල</span>
+        <i class="fa-solid fa-check lang-check"></i>
+      </button>
+      <button class="lang-option" data-lang="ta" id="opt-ta">
+        <span class="lang-flag">🇮🇳</span>
+        <span>தமிழ்</span>
+        <i class="fa-solid fa-check lang-check"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-icon-container">
+          <!-- IntelliGrade Custom SVG Icon -->
+          <svg class="logo-svg-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="igGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#8B5CF6"/>
+                <stop offset="100%" style="stop-color:#EC4899"/>
+              </linearGradient>
+              <linearGradient id="igGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#C4B5FD"/>
+                <stop offset="100%" style="stop-color:#F9A8D4"/>
+              </linearGradient>
+            </defs>
+            <!-- Graduation Cap Base -->
+            <rect x="10" y="32" width="44" height="20" rx="5" fill="url(#igGrad1)" opacity="0.85"/>
+            <!-- Cap Top Board -->
+            <polygon points="32,10 62,26 32,34 2,26" fill="url(#igGrad1)"/>
+            <!-- Cap Shine -->
+            <polygon points="32,10 62,26 32,18" fill="url(#igGrad2)" opacity="0.4"/>
+            <!-- Tassel string -->
+            <line x1="56" y1="26" x2="56" y2="40" stroke="url(#igGrad2)" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="56" cy="42" r="3.5" fill="url(#igGrad2)"/>
+            <!-- IG letters on cap -->
+            <text x="22" y="47" font-family="'Outfit',sans-serif" font-weight="800" font-size="12" fill="white" opacity="0.95">IG</text>
+          </svg>
+        </div>
+        <div class="brand-text-area">
+          <h1 class="brand-name">IntelliGrade</h1>
+          <span class="brand-tagline" data-i18n="brand_tagline">Smart Academic Performance Analyzer</span>
+        </div>
+      </div>
+      <p class="subtitle" data-i18n="header_subtitle">PDF exam marks are identified, GPA calculated & Excel reports generated automatically</p>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="app-main">
+      <!-- Left column: Upload and Credits Config -->
+      <section class="control-panel card-glass">
+        <!-- Step 1: Upload PDF -->
+        <div id="step-upload" class="step-section active">
+          <div class="section-title">
+            <span class="step-badge" data-i18n="step1_badge">Step 01</span>
+            <h2 data-i18n="step1_title">Upload PDF Files</h2>
+          </div>
+          
+          <div class="upload-area" id="dropzone">
+            <input type="file" id="file-input" accept=".pdf" multiple hidden>
+            <div class="upload-icon-wrapper">
+              <i class="fa-solid fa-file-pdf pdf-icon"></i>
+              <div class="icon-glow"></div>
+            </div>
+            <p class="upload-text" data-i18n="upload_drag_text">Drag & Drop one or more PDF files here</p>
+            <span class="upload-divider" data-i18n="upload_or">or</span>
+            <button type="button" class="btn btn-secondary" id="browse-btn">
+              <i class="fa-solid fa-folder-open"></i> <span data-i18n="upload_browse_btn">Browse from Computer</span>
+            </button>
+            <p class="file-info" id="file-info-text"></p>
+            <div class="uploaded-files-list" id="uploaded-files-list"></div>
+          </div>
+        </div>
+
+        <!-- Step 2: Configure Credits (Hidden initially) -->
+        <div id="step-credits" class="step-section">
+          <div class="section-title">
+            <span class="step-badge" data-i18n="step2_badge">Step 02</span>
+            <h2 data-i18n="step2_title">Enter Module Credits</h2>
+          </div>
+          <p class="step-description" data-i18n="step2_desc">Enter the credit value for each identified module:</p>
+
+          <form id="credits-form" class="credits-grid">
+            <!-- Dynamically populated module credit input fields -->
+            <div id="modules-list" class="modules-input-list"></div>
+            
+            <div class="control-buttons">
+              <button type="button" class="btn btn-outline" id="btn-show-grading">
+                <i class="fa-solid fa-sliders"></i> <span data-i18n="btn_view_grading">View Grading Scale</span>
+              </button>
+              <button type="submit" class="btn btn-primary" id="btn-process">
+                <i class="fa-solid fa-calculator"></i> <span data-i18n="btn_calculate_gpa">Calculate GPA (Process)</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Right column: Preview Tables & Download -->
+      <section class="results-panel card-glass disabled" id="results-panel">
+        <div class="results-header">
+          <div class="section-title">
+            <span class="step-badge" data-i18n="step3_badge">Step 03</span>
+            <h2 data-i18n="step3_title">GPA Progress Chart (Preview)</h2>
+          </div>
+          <button class="btn btn-success" id="btn-download-excel" disabled>
+            <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_download_excel">Download Excel (.xlsx)</span>
+          </button>
+        </div>
+
+        <!-- Main Stats Grid (Total, Passed, Failed) -->
+        <div class="main-stats-grid">
+          <div class="stat-card total-card">
+            <div class="stat-icon-wrapper std-icon">
+              <i class="fa-solid fa-users"></i>
+            </div>
+            <div class="stat-details">
+              <span class="stat-value" id="stat-total-students">-</span>
+              <span class="stat-label" data-i18n="stat_total_students">Total Students</span>
+            </div>
+          </div>
+          
+          <div class="stat-card pass-card">
+            <div class="stat-icon-wrapper pass-icon">
+              <i class="fa-solid fa-user-check"></i>
+            </div>
+            <div class="stat-details">
+              <span class="stat-value" id="stat-passed-students">-</span>
+              <span class="stat-label" data-i18n="stat_passed_students">Passed Students</span>
+            </div>
+          </div>
+
+          <div class="stat-card fail-card">
+            <div class="stat-icon-wrapper fail-icon">
+              <i class="fa-solid fa-user-xmark"></i>
+            </div>
+            <div class="stat-details">
+              <span class="stat-value" id="stat-failed-students">-</span>
+              <span class="stat-label" data-i18n="stat_failed_students">Failed Students</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analytics Dashboard Row -->
+        <div class="analytics-dashboard-row">
+          <!-- GPA Distribution Card -->
+          <div class="analytics-card gpa-ranges-card">
+            <h4><i class="fa-solid fa-chart-bar"></i> <span data-i18n="gpa_distribution">GPA Distribution (GPA Ranges)</span></h4>
+            <div class="gpa-range-list">
+              <div class="gpa-range-item">
+                <span class="range-label">GPA 3.50 - 4.00</span>
+                <div class="progress-bar-wrapper">
+                  <div class="progress-bar" id="bar-gpa-35-40" style="width: 0%"></div>
+                  <span class="progress-bar-count" id="count-gpa-35-40">0</span>
+                </div>
+              </div>
+              <div class="gpa-range-item">
+                <span class="range-label">GPA 3.00 - 3.50</span>
+                <div class="progress-bar-wrapper">
+                  <div class="progress-bar" id="bar-gpa-30-35" style="width: 0%"></div>
+                  <span class="progress-bar-count" id="count-gpa-30-35">0</span>
+                </div>
+              </div>
+              <div class="gpa-range-item">
+                <span class="range-label">GPA 2.50 - 3.00</span>
+                <div class="progress-bar-wrapper">
+                  <div class="progress-bar" id="bar-gpa-25-30" style="width: 0%"></div>
+                  <span class="progress-bar-count" id="count-gpa-25-30">0</span>
+                </div>
+              </div>
+              <div class="gpa-range-item">
+                <span class="range-label">GPA 2.00 - 2.50</span>
+                <div class="progress-bar-wrapper">
+                  <div class="progress-bar" id="bar-gpa-20-25" style="width: 0%"></div>
+                  <span class="progress-bar-count" id="count-gpa-20-25">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cumulative GPA Thresholds Card & Search Box -->
+          <div class="analytics-card gpa-thresholds-card">
+            <h4><i class="fa-solid fa-award"></i> <span data-i18n="performance_levels">Special Performance Levels</span></h4>
+            <div class="thresholds-grid">
+              <div class="threshold-item">
+                <i class="fa-solid fa-circle-arrow-up text-success" style="color: #10b981;"></i>
+                <div class="threshold-details">
+                  <span class="threshold-value" id="count-gpa-above-30">0</span>
+                  <span class="threshold-label" data-i18n="gpa_above_30">Students above GPA 3.0</span>
+                </div>
+              </div>
+              <div class="threshold-item">
+                <i class="fa-solid fa-circle-arrow-up text-primary" style="color: #3b82f6;"></i>
+                <div class="threshold-details">
+                  <span class="threshold-value" id="count-gpa-above-27">0</span>
+                  <span class="threshold-label" data-i18n="gpa_above_27">Students above GPA 2.7</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="search-box-container-inside">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="search-input" data-i18n-placeholder="search_placeholder" placeholder="Search by IT Number...">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="preview-table" id="gpa-table">
+            <thead>
+              <!-- Dynamically populated table headers -->
+              <tr id="table-headers">
+                <th data-i18n="table_no">No.</th>
+                <th data-i18n="table_reg_no">Registration Number</th>
+                <th data-i18n="table_gpa">GPA</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <tr>
+                <td colspan="3" class="empty-state">
+                  <i class="fa-solid fa-table-cells empty-icon"></i>
+                  <p data-i18n="table_empty_state">Results will appear here after processing data.</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Grading Scale Drawer / Modal -->
+  <div class="modal-overlay" id="grading-modal">
+    <div class="modal-card card-glass">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-sliders"></i> <span data-i18n="modal_grading_title">GPA Grading Scale Settings</span></h2>
+        <button class="btn-close" id="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro" data-i18n="modal_grading_intro">GPA values given by mark categories are shown below. You may change them if needed.</p>
+        <div class="scale-table-wrapper">
+          <table class="modal-scale-table">
+            <thead>
+              <tr>
+                <th data-i18n="modal_col_grade">Grade</th>
+                <th data-i18n="modal_col_gpa">GPA (Grade Point)</th>
+                <th data-i18n="modal_col_min">Minimum Mark (%)</th>
+              </tr>
+            </thead>
+            <tbody id="scale-table-body">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="btn-reset-scale" data-i18n="btn_reset_scale">Reset to Default Scale</button>
+        <button class="btn btn-primary" id="btn-save-scale" data-i18n="btn_save_scale">Confirm Grading Scale</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loader Overlay -->
+  <div class="loader-overlay" id="loader">
+    <div class="loader-content">
+      <div class="spinner-container">
+        <div class="spinner-ring ring-1"></div>
+        <div class="spinner-ring ring-2"></div>
+        <div class="spinner-ring ring-3"></div>
+        <i class="fa-solid fa-file-pdf spinner-icon"></i>
+      </div>
+      <p id="loader-text" data-i18n="loader_default">Analyzing file, please wait...</p>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Script -->
+  <script src="js/app.js"></script>
+</body>
+</html>
