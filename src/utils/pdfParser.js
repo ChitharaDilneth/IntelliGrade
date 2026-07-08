@@ -1,8 +1,8 @@
 const pdfParse = require('pdf-parse');
 const path = require('path');
 
-// Robust registration number regex
-const REG_NO_REGEX = /\b(IT\d{7,8}|[A-Z]{2,4}\d{4,9}|[A-Z]{2,4}[/-]\d{2,4}([/-]\d{2,4})?[/-]\d{3,4})\b/i;
+// Robust registration number regex; avoid matching short module codes like IT3010
+const REG_NO_REGEX = /\b(IT\d{7,8}|SE\d{7,8}|IE\d{7,8}|BM\d{7,8}|EN\d{7,8}|EG\d{7,8}|[A-Z]{2,4}\d{6,9}|[A-Z]{2,4}[/-]\d{2,4}(?:[/-]\d{2,4})?[/-]\d{3,4})\b/i;
 
 function cleanText(text) {
   return text.split('\n').map(line => line.trim()).filter(Boolean);
@@ -197,7 +197,7 @@ function parseBlockFormat(lines) {
     const line = lines[i];
     const regNoMatch = line.match(REG_NO_REGEX);
     
-    if (regNoMatch) {
+    if (regNoMatch && !line.match(/^[A-Z]{2,4}\d{4,6}[:]?$/i)) {
       if (currentStudent && Object.keys(currentStudent.marks).length > 0) {
         students.push(currentStudent);
       }
@@ -207,7 +207,7 @@ function parseBlockFormat(lines) {
       };
     } else if (currentStudent) {
       const separatorMatch = line.match(/^([A-Z0-9\s_-]+?)[:=-]\s*(\d+(\.\d+)?)$/i) || 
-                            line.match(/^([A-Z]{2,4}\d{4})\s+(\d+(\.\d+)?)$/i);
+                            line.match(/^([A-Z]{2,4}\d{4,9})\s+(\d+(\.\d+)?)$/i);
       
       if (separatorMatch) {
         const moduleName = separatorMatch[1].trim();
