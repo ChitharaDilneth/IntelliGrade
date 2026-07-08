@@ -130,7 +130,7 @@ function processMarks(req, res) {
         };
       });
 
-      const rawGpa = weightedPointsSum / totalCredits;
+      const rawGpa = Math.round((weightedPointsSum / totalCredits) * 100) / 100;
       // We will save precise GPA for sorting, and string version for formatted display
       return {
         registrationNumber: student.registrationNumber.toUpperCase(),

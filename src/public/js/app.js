@@ -961,7 +961,7 @@ function renderResultsTable(students, modules, shortNames = {}) {
       <td><strong>${student.registrationNumber}</strong></td>
       ${marksCells}
       <td class="center-col">
-        <span class="gpa-badge ${gpaClass}">${student.gpa.toFixed(4)}</span>
+        <span class="gpa-badge ${gpaClass}">${student.gpa.toFixed(2)}</span>
       </td>
     `;
     tableBody.appendChild(tr);
