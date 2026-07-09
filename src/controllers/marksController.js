@@ -66,7 +66,7 @@ async function uploadTextContent(req, res, text, filename) {
  */
 function processMarks(req, res) {
   try {
-    const { students, modules, credits, gradingScale } = req.body;
+    const { students, modules, credits, gradingScale, nonGpaModules = [] } = req.body;
 
     if (!students || !modules || !credits) {
       return res.status(400).json({ error: 'අසම්පූර්ණ දත්ත (Missing students, modules, or credits).' });
@@ -77,6 +77,10 @@ function processMarks(req, res) {
     let totalCredits = 0;
     
     modules.forEach(mod => {
+      if (nonGpaModules.includes(mod)) {
+        parsedCredits[mod] = 0;
+        return;
+      }
       const creditVal = parseFloat(credits[mod]);
       if (isNaN(creditVal) || creditVal <= 0) {
         throw new Error(`"${mod}" Module එක සඳහා ලබා දී ඇති Credit ප්‍රමාණය වලංගු නොවේ.`);
@@ -84,10 +88,6 @@ function processMarks(req, res) {
       parsedCredits[mod] = creditVal;
       totalCredits += creditVal;
     });
-
-    if (totalCredits === 0) {
-      throw new Error('මුළු Credit ප්‍රමාණය 0 විය නොහැක.');
-    }
 
     // Process students and calculate GPAs
     const processedStudents = students.map(student => {
@@ -130,7 +130,7 @@ function processMarks(req, res) {
         };
       });
 
-      const rawGpa = Math.round((weightedPointsSum / totalCredits) * 100) / 100;
+      const rawGpa = totalCredits > 0 ? Math.round((weightedPointsSum / totalCredits) * 100) / 100 : 0.0;
       // We will save precise GPA for sorting, and string version for formatted display
       return {
         registrationNumber: student.registrationNumber.toUpperCase(),

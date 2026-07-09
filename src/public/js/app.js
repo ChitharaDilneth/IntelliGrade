@@ -76,6 +76,7 @@ const TRANSLATIONS = {
     // Module form
     module_label_shortname: 'Short Name:',
     module_label_credits: 'Credits:',
+    module_label_nongpa: 'Non-GPA',
     module_sub_label: 'Exam Subject Module',
     // Table rendering
     table_no_results: 'No students found with the searched registration number.',
@@ -161,6 +162,7 @@ const TRANSLATIONS = {
     // Module form
     module_label_shortname: 'කෙටි නම:',
     module_label_credits: 'Credits:',
+    module_label_nongpa: 'GPA නොවන',
     module_sub_label: 'විභාග විෂය Module',
     // Table rendering
     table_no_results: 'සොයන ලද ලියාපදිංචි අංකයෙන් සිසුන් කිසිවෙකු හමු නොවීය.',
@@ -246,6 +248,7 @@ const TRANSLATIONS = {
     // Module form
     module_label_shortname: 'சுருக்கப் பெயர்:',
     module_label_credits: 'Credits:',
+    module_label_nongpa: 'GPA அல்லாத',
     module_sub_label: 'தேர்வு பாட Module',
     // Table rendering
     table_no_results: 'தேடிய பதிவு எண்ணில் மாணவர்கள் யாரும் கிடைக்கவில்லை.',
@@ -859,20 +862,39 @@ function renderCreditsForm() {
         <span class="module-code">${mod}</span>
         <span class="module-name">${t('module_sub_label')}</span>
       </div>
-      <div class="module-inputs-group">
-        <div class="input-field">
+      <div class="module-inputs-group" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+        <div class="input-field" style="flex: 1; min-width: 120px;">
           <label for="shortname-${mod}">${t('module_label_shortname')}</label>
           <input type="text" id="shortname-${mod}" name="shortname-${mod}" class="input-shortname" 
                  placeholder="e.g. OOP" value="${mod.substring(0, 6).toUpperCase()}" required>
         </div>
-        <div class="input-field">
+        <div class="input-field" style="flex: 1; min-width: 120px;">
           <label for="credit-${mod}">${t('module_label_credits')}</label>
           <input type="number" id="credit-${mod}" name="${mod}" class="input-credit" 
                  min="1" max="10" step="0.5" value="3.0" required>
         </div>
+        <div class="input-field checkbox-field" style="display: flex; align-items: center; gap: 8px; margin-top: 24px; min-width: 100px;">
+          <input type="checkbox" id="nongpa-${mod}" name="nongpa-${mod}" class="checkbox-nongpa" style="width: 18px; height: 18px; cursor: pointer;">
+          <label for="nongpa-${mod}" style="margin-bottom: 0; font-size: 0.9rem; font-weight: 500; cursor: pointer; color: var(--text-color);">${t('module_label_nongpa')}</label>
+        </div>
       </div>
     `;
     modulesList.appendChild(row);
+
+    const checkbox = row.querySelector(`#nongpa-${mod}`);
+    const creditInput = row.querySelector(`#credit-${mod}`);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        creditInput.disabled = true;
+        creditInput.dataset.prevValue = creditInput.value;
+        creditInput.value = '0';
+        creditInput.removeAttribute('required');
+      } else {
+        creditInput.disabled = false;
+        creditInput.value = creditInput.dataset.prevValue || '3.0';
+        creditInput.setAttribute('required', '');
+      }
+    });
   });
 }
 
@@ -887,14 +909,23 @@ async function handleProcessSubmit(e) {
 
   showLoader(t('loader_processing'));
 
-  // Extract credit values and short names
+  // Extract credit values, short names, and non-GPA designations
   const credits = {};
   const shortNames = {};
+  const nonGpaModules = [];
+  
   parsedModules.forEach(mod => {
     const inputCredit = document.getElementById(`credit-${mod}`);
     const inputShortname = document.getElementById(`shortname-${mod}`);
-    credits[mod] = parseFloat(inputCredit.value);
+    const inputNonGpa = document.getElementById(`nongpa-${mod}`);
+    
     shortNames[mod] = inputShortname.value.trim().toUpperCase() || mod;
+    if (inputNonGpa && inputNonGpa.checked) {
+      nonGpaModules.push(mod);
+      credits[mod] = 0;
+    } else {
+      credits[mod] = parseFloat(inputCredit.value);
+    }
   });
 
   try {
@@ -907,7 +938,8 @@ async function handleProcessSubmit(e) {
         students: parsedStudents,
         modules: parsedModules,
         credits: credits,
-        gradingScale: activeGradingScale
+        gradingScale: activeGradingScale,
+        nonGpaModules: nonGpaModules
       })
     });
 
