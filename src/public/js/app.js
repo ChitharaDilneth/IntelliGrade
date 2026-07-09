@@ -881,8 +881,8 @@ function renderCreditsForm() {
     `;
     modulesList.appendChild(row);
 
-    const checkbox = row.querySelector(`#nongpa-${mod}`);
-    const creditInput = row.querySelector(`#credit-${mod}`);
+    const checkbox = row.querySelector('.checkbox-nongpa');
+    const creditInput = row.querySelector('.input-credit');
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) {
         creditInput.disabled = true;
@@ -914,10 +914,14 @@ async function handleProcessSubmit(e) {
   const shortNames = {};
   const nonGpaModules = [];
   
-  parsedModules.forEach(mod => {
-    const inputCredit = document.getElementById(`credit-${mod}`);
-    const inputShortname = document.getElementById(`shortname-${mod}`);
-    const inputNonGpa = document.getElementById(`nongpa-${mod}`);
+  const rows = modulesList.querySelectorAll('.module-input-row');
+  rows.forEach(row => {
+    const codeSpan = row.querySelector('.module-code');
+    const mod = codeSpan.textContent.trim();
+    
+    const inputCredit = row.querySelector('.input-credit');
+    const inputShortname = row.querySelector('.input-shortname');
+    const inputNonGpa = row.querySelector('.checkbox-nongpa');
     
     shortNames[mod] = inputShortname.value.trim().toUpperCase() || mod;
     if (inputNonGpa && inputNonGpa.checked) {
