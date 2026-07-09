@@ -2,11 +2,9 @@
 const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 const path = require('path');
 
-// Robust registration number regex; avoid matching short module codes like IT3010
-const REG_NO_REGEX = /\b(IT\d{7,8}|SE\d{7,8}|IE\d{7,8}|BM\d{7,8}|EN\d{7,8}|EG\d{7,8}|[A-Z]{2,4}\d{6,9}|[A-Z]{2,4}[/-]\d{2,4}(?:[/-]\d{2,4})?[/-]\d{3,4})\b/i;
-
-// Broad universal index/registration number regex matching various Sri Lankan & global university patterns
-const GENERAL_REG_NO_REGEX = /\b(?:IT|SE|IE|BM|EN|EG)\d{7,8}\b|\b(?:IT|SE|IE|BM|EN|EG)\s*\d{2}\s*\d{4}\s*\d{2}\b|\b[A-Z0-9]{2,4}(?:[/-][A-Z0-9]{1,4}){2,4}\b|\b[A-Z]{1,2}[/-]\d{2,4}[/-]\d{3,4}\b|\b\d{6}[A-Z]\b|\b[A-Z]{1,3}\d{5,8}\b|\b\d{5,8}[A-Z]{1,3}\b|\b\d{7,9}\b/i;
+// Universal index/registration number regex matching various Sri Lankan & global university patterns (with spacing tolerance)
+const REG_NO_REGEX = /\b(?:IT|SE|IE|BM|EN|EG)\s*\d{7,8}\b|\b(?:IT|SE|IE|BM|EN|EG)\s*\d{2}\s*\d{4}\s*\d{2}\b|\b[A-Z0-9]{2,4}(?:[/-][A-Z0-9]{1,4}){2,4}\b|\b[A-Z]{1,2}[/-]\d{2,4}[/-]\d{3,4}\b|\b\d{6}\s*[A-Z]\b|\b[A-Z]{1,3}\s*\d{5,8}\b|\b\d{5,8}\s*[A-Z]{1,3}\b|\b\d{7,9}\b/i;
+const GENERAL_REG_NO_REGEX = REG_NO_REGEX;
 
 // Broad grade matching regex
 const GRADE_REGEX = /^(?:[A-D][+-]?|E|F|F\+|I|I-?C|AB|PASS|FAIL)$/i;
@@ -277,13 +275,16 @@ function parseStructuredText(text) {
       // Skip header rows (match keywords like Index, Reg No, Student ID, name)
       if (/(?:index|reg|student|id|name|no\.?|code|faculty)/i.test(idCell.replace(/\s+/g, ''))) return;
       
-      // Ensure there is at least one valid mark (numeric) or grade in the row
-      const hasResult = sub.resultColIndices.some(c => {
-        const val = row[c];
-        if (!val) return false;
-        return !isNaN(parseFloat(val)) || GRADE_REGEX.test(val);
-      });
-      if (!hasResult) return;
+      // If the cell contains a valid registration/index number, bypass hasResult check
+      const isRegNo = GENERAL_REG_NO_REGEX.test(idCell);
+      if (!isRegNo) {
+        const hasResult = sub.resultColIndices.some(c => {
+          const val = row[c];
+          if (!val) return false;
+          return !isNaN(parseFloat(val)) || GRADE_REGEX.test(val);
+        });
+        if (!hasResult) return;
+      }
       
       studentRows.push({ row, rowIdx });
     });

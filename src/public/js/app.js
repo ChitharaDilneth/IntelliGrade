@@ -621,8 +621,8 @@ async function extractTextFromPdf(file) {
   
   let fullText = '';
   
-  // Regex to detect common index numbers to locate student rows
-  const BROAD_REG_NO_REGEX = /\b(?:IT|SE|IE|BM|EN|EG)\d{7,8}\b|\b(?:IT|SE|IE|BM|EN|EG)\s*\d{2}\s*\d{4}\s*\d{2}\b|\b[A-Z0-9]{2,4}(?:[/-][A-Z0-9]{1,4}){2,4}\b|\b[A-Z]{1,2}[/-]\d{2,4}[/-]\d{3,4}\b|\b\d{6}[A-Z]\b|\b[A-Z]{1,3}\d{5,8}\b|\b\d{5,8}[A-Z]{1,3}\b|\b\d{7,9}\b/i;
+  // Regex to detect common index numbers to locate student rows (with spacing tolerance)
+  const BROAD_REG_NO_REGEX = /\b(?:IT|SE|IE|BM|EN|EG)\s*\d{7,8}\b|\b(?:IT|SE|IE|BM|EN|EG)\s*\d{2}\s*\d{4}\s*\d{2}\b|\b[A-Z0-9]{2,4}(?:[/-][A-Z0-9]{1,4}){2,4}\b|\b[A-Z]{1,2}[/-]\d{2,4}[/-]\d{3,4}\b|\b\d{6}\s*[A-Z]\b|\b[A-Z]{1,3}\s*\d{5,8}\b|\b\d{5,8}\s*[A-Z]{1,3}\b|\b\d{7,9}\b/i;
 
   for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
     const page = await pdfDoc.getPage(pageNum);
