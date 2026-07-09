@@ -37,6 +37,7 @@ const TRANSLATIONS = {
     // Table
     table_no: 'No.',
     table_reg_no: 'Registration Number',
+    table_student_name: 'Student Name',
     table_gpa: 'GPA',
     table_empty_state: 'Results will appear here after processing data.',
     search_placeholder: 'Search by IT Number...',
@@ -121,6 +122,7 @@ const TRANSLATIONS = {
     // Table
     table_no: 'අනු අංකය',
     table_reg_no: 'ලියාපදිංචි අංකය',
+    table_student_name: 'ශිෂ්‍යයාගේ නම',
     table_gpa: 'GPA',
     table_empty_state: 'දත්ත සකස් කිරීමෙන් පසු ප්‍රතිඵල ලේඛනය මෙහි දිස්වේ.',
     search_placeholder: 'IT Number එකෙන් සොයන්න...',
@@ -205,6 +207,7 @@ const TRANSLATIONS = {
     // Table
     table_no: 'வ.எண்',
     table_reg_no: 'பதிவு எண்',
+    table_student_name: 'மாணவர் பெயர்',
     table_gpa: 'GPA',
     table_empty_state: 'தரவு செயலாக்கப்பட்ட பின் முடிவுகள் இங்கே தோன்றும்.',
     search_placeholder: 'IT எண்ணால் தேடவும்...',
@@ -598,6 +601,8 @@ function renderAccumulatedFiles() {
 }
 
 // Extract text from a single PDF file using pdf.js (client-side)
+// Reconstructs the lines by grouping Y-coordinates, and dynamically clusters X-coordinates
+// of student row elements to output structured pipe-separated (|) text columns.
 async function extractTextFromPdf(file) {
   const arrayBuffer = await file.arrayBuffer();
   const uint8Array = new Uint8Array(arrayBuffer);
@@ -612,13 +617,17 @@ async function extractTextFromPdf(file) {
   const pdfDoc = await loadingTask.promise;
   
   let fullText = '';
+  
+  // Regex to detect common index numbers to locate student rows
+  const BROAD_REG_NO_REGEX = /\b(?:IT|SE|IE|BM|EN|EG)\d{7,8}\b|\b(?:IT|SE|IE|BM|EN|EG)\s*\d{2}\s*\d{4}\s*\d{2}\b|\b[A-Z0-9]{2,4}(?:[/-][A-Z0-9]{1,4}){2,4}\b|\b[A-Z]{1,2}[/-]\d{2,4}[/-]\d{3,4}\b|\b\d{6}[A-Z]\b|\b[A-Z]{1,3}\d{5,8}\b|\b\d{5,8}[A-Z]{1,3}\b|\b\d{7,9}\b/i;
+
   for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
     const page = await pdfDoc.getPage(pageNum);
     const textContent = await page.getTextContent();
     
     // Group text items by Y-position with a threshold (robust line reconstruction)
     const linesMap = {};
-    const threshold = 5; // points (same as the original backend fallback logic)
+    const threshold = 5; // points
     
     textContent.items.forEach(item => {
       if (!item.str || item.str.trim() === '') return;
@@ -645,14 +654,88 @@ async function extractTextFromPdf(file) {
     // Sort lines top to bottom (Y descending)
     const sortedYKeys = Object.keys(linesMap).sort((a, b) => parseFloat(b) - parseFloat(a));
     
+    // Gather X coordinates of text items that belong to student rows to build column layout
+    const xCoords = [];
+    
     sortedYKeys.forEach(y => {
       const lineItems = linesMap[y];
-      // Sort items left to right (X ascending)
       lineItems.sort((a, b) => a.x - b.x);
-      
       const lineText = lineItems.map(item => item.str).join(' ');
-      fullText += lineText + '\n';
+      
+      // Determine if it looks like a student row (has ID regex, or name-like words + numeric marks)
+      const hasMarks = lineItems.some(item => !isNaN(parseFloat(item.str)) && parseFloat(item.str) >= 0 && parseFloat(item.str) <= 100);
+      const hasNameWords = lineItems.filter(item => /^[a-zA-Z]{3,}$/.test(item.str.trim())).length >= 2;
+      const isStudentRow = BROAD_REG_NO_REGEX.test(lineText) || (hasMarks && hasNameWords);
+      
+      if (isStudentRow) {
+        lineItems.forEach(item => {
+          xCoords.push(item.x);
+        });
+      }
     });
+    
+    // Cluster X coordinates to find column boundaries
+    let columns = [];
+    if (xCoords.length > 0) {
+      xCoords.sort((a, b) => a - b);
+      let currentCluster = [xCoords[0]];
+      const clusterTolerance = 15; // points
+      
+      for (let i = 1; i < xCoords.length; i++) {
+        const x = xCoords[i];
+        const lastX = currentCluster[currentCluster.length - 1];
+        
+        if (x - lastX < clusterTolerance) {
+          currentCluster.push(x);
+        } else {
+          const avg = currentCluster.reduce((sum, v) => sum + v, 0) / currentCluster.length;
+          columns.push(avg);
+          currentCluster = [x];
+        }
+      }
+      if (currentCluster.length > 0) {
+        const avg = currentCluster.reduce((sum, v) => sum + v, 0) / currentCluster.length;
+        columns.push(avg);
+      }
+    }
+    
+    columns.sort((a, b) => a - b);
+    
+    // Reconstruct lines into pipe-separated structured CSV
+    if (columns.length > 1) {
+      sortedYKeys.forEach(y => {
+        const lineItems = linesMap[y];
+        const rowCells = Array.from({ length: columns.length }, () => []);
+        
+        lineItems.forEach(item => {
+          let closestColIdx = 0;
+          let minDistance = Math.abs(item.x - columns[0]);
+          
+          for (let c = 1; c < columns.length; c++) {
+            const dist = Math.abs(item.x - columns[c]);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestColIdx = c;
+            }
+          }
+          rowCells[closestColIdx].push(item);
+        });
+        
+        const delimitedLine = rowCells.map(cellItems => {
+          cellItems.sort((a, b) => a.x - b.x);
+          return cellItems.map(item => item.str).join(' ').trim();
+        }).join(' | ');
+        
+        fullText += delimitedLine + '\n';
+      });
+    } else {
+      // Fallback to basic string reconstruction
+      sortedYKeys.forEach(y => {
+        const lineItems = linesMap[y];
+        lineItems.sort((a, b) => a.x - b.x);
+        fullText += lineItems.map(item => item.str).join(' ') + '\n';
+      });
+    }
   }
   
   return fullText;
@@ -701,9 +784,13 @@ async function uploadFiles(files) {
         if (!combinedStudentsMap[regNum]) {
           combinedStudentsMap[regNum] = {
             registrationNumber: regNum,
+            studentName: student.studentName || null,
             marks: {},
             grades: {}
           };
+        }
+        if (student.studentName && !combinedStudentsMap[regNum].studentName) {
+          combinedStudentsMap[regNum].studentName = student.studentName;
         }
         Object.assign(combinedStudentsMap[regNum].marks, student.marks || {});
         if (student.grades) {
@@ -923,10 +1010,13 @@ function updateDashboardStats(students) {
 
 // Render GPA sorted preview table with grades and subject short names
 function renderResultsTable(students, modules, shortNames = {}) {
+  const hasNames = students.some(s => s.studentName);
+
   // Populate headers with short names
   tableHeaders.innerHTML = `
     <th>${t('table_no')}</th>
     <th>${t('table_reg_no')}</th>
+    ${hasNames ? `<th>${t('table_student_name')}</th>` : ''}
     ${modules.map(mod => `<th class="center-col">${shortNames[mod] || mod} ${t('grade_header_suffix')}</th>`).join('')}
     <th class="center-col">${t('table_gpa')}</th>
   `;
@@ -937,14 +1027,18 @@ function renderResultsTable(students, modules, shortNames = {}) {
     rank: idx + 1
   }));
 
-  // Filter students based on current search query
+  // Filter students based on current search query (matches both Registration Number and Student Name)
   const query = searchInput.value.toUpperCase().trim();
-  const filteredStudents = studentsWithRank.filter(item => item.student.registrationNumber.includes(query));
+  const filteredStudents = studentsWithRank.filter(item => {
+    const regMatch = item.student.registrationNumber.includes(query);
+    const nameMatch = item.student.studentName && item.student.studentName.toUpperCase().includes(query);
+    return regMatch || nameMatch;
+  });
 
   if (filteredStudents.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="${3 + modules.length}" class="empty-state">
+        <td colspan="${(hasNames ? 4 : 3) + modules.length}" class="empty-state">
           <i class="fa-solid fa-magnifying-glass-minus empty-icon"></i>
           <p>${t('table_no_results')}</p>
         </td>
@@ -989,6 +1083,7 @@ function renderResultsTable(students, modules, shortNames = {}) {
     tr.innerHTML = `
       <td class="center-col">${rank}</td>
       <td><strong>${student.registrationNumber}</strong></td>
+      ${hasNames ? `<td>${student.studentName || '-'}</td>` : ''}
       ${marksCells}
       <td class="center-col">
         <span class="gpa-badge ${gpaClass}">${student.gpa.toFixed(2)}</span>

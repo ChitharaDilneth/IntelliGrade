@@ -134,6 +134,7 @@ function processMarks(req, res) {
       // We will save precise GPA for sorting, and string version for formatted display
       return {
         registrationNumber: student.registrationNumber.toUpperCase(),
+        studentName: student.studentName || null,
         grades: studentGrades,
         marks: student.marks, // original marks map
         gpa: rawGpa

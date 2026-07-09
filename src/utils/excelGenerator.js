@@ -25,7 +25,8 @@ async function generateExcelReport(students, modules, shortNames = {}) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('GPA Report');
 
-  const totalCols = 3 + modules.length; // No, RegNo, Modules..., GPA
+  const hasNames = students.some(s => s.studentName);
+  const totalCols = (hasNames ? 4 : 3) + modules.length; // No, RegNo, [Name], Modules..., GPA
   const lastColLetter = getColumnLetter(totalCols);
 
   // 1. Add Title Row (Merged)
@@ -42,7 +43,12 @@ async function generateExcelReport(students, modules, shortNames = {}) {
   worksheet.getRow(1).height = 40;
 
   // 2. Add Headers (Use Subject Short Name + " Grade")
-  const headers = ['No.', 'Registration Number', ...modules.map(mod => `${shortNames[mod] || mod} Grade`), 'GPA'];
+  const headers = ['No.', 'Registration Number'];
+  if (hasNames) {
+    headers.push('Student Name');
+  }
+  headers.push(...modules.map(mod => `${shortNames[mod] || mod} Grade`), 'GPA');
+  
   worksheet.getRow(2).values = headers;
   worksheet.getRow(2).height = 28;
 
@@ -75,12 +81,17 @@ async function generateExcelReport(students, modules, shortNames = {}) {
     const rowNum = idx + 3; // Starting after Title (1) and Header (2)
     const rowData = [
       idx + 1, // Sequential No
-      student.registrationNumber,
+      student.registrationNumber
+    ];
+    if (hasNames) {
+      rowData.push(student.studentName || '');
+    }
+    rowData.push(
       // Map modules to the student's Grade instead of Marks
       ...modules.map(mod => (student.grades[mod] && student.grades[mod].grade) ? student.grades[mod].grade : ''),
       // Insert numeric GPA to let Excel format it
       parseFloat(student.gpa)
-    ];
+    );
 
     worksheet.getRow(rowNum).values = rowData;
     worksheet.getRow(rowNum).height = 20;
@@ -104,6 +115,9 @@ async function generateExcelReport(students, modules, shortNames = {}) {
       } else if (col === 2) {
         // Registration Number
         cell.alignment = leftAlign;
+      } else if (hasNames && col === 3) {
+        // Student Name
+        cell.alignment = leftAlign;
       } else if (col === totalCols) {
         // GPA
         cell.alignment = centerAlign;
@@ -117,7 +131,6 @@ async function generateExcelReport(students, modules, shortNames = {}) {
   });
 
   // 4. Freeze Pane (Header remains fixed when scrolling)
-  // We want to freeze rows 1 and 2, so the split is below row 2
   worksheet.views = [
     {
       state: 'frozen',
@@ -129,7 +142,6 @@ async function generateExcelReport(students, modules, shortNames = {}) {
   ];
 
   // 5. Auto-fit column widths
-  // We calculate column widths based on maximum content length with safety padding
   for (let col = 1; col <= totalCols; col++) {
     let maxLength = 0;
     
@@ -141,7 +153,6 @@ async function generateExcelReport(students, modules, shortNames = {}) {
     for (let row = 3; row <= students.length + 2; row++) {
       const cellVal = worksheet.getCell(row, col).value;
       if (cellVal !== null && cellVal !== undefined) {
-        // If GPA, format it to 2 decimals for length calculation
         if (col === totalCols) {
           maxLength = Math.max(maxLength, Number(cellVal).toFixed(2).length);
         } else {
