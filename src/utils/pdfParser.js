@@ -349,9 +349,82 @@ function parseStructuredText(text) {
   
   if (allStudents.length === 0) return null;
   
+  let finalModules = Array.from(allModulesSet);
+  let finalStudents = allStudents;
+  
+  // If the parsed file has multiple results columns, check if it's a single subject sheet with multiple component columns
+  if (finalModules.length > 1) {
+    const componentKeywords = ['ca', 'cw', 'ass', 'status', 'remark', 'grade', 'exam', 'total', 'final', 'internal', 'external', 'mark', 'results'];
+    const isSingleSubjectComponentSheet = finalModules.some(m => {
+      const lower = m.toLowerCase();
+      return componentKeywords.some(kw => lower.includes(kw));
+    });
+    
+    if (isSingleSubjectComponentSheet) {
+      // Find the single best column index/module
+      let bestIdx = 0;
+      let bestScore = -999;
+      
+      finalModules.forEach((modName, idx) => {
+        const lowerHeader = modName.toLowerCase();
+        let score = 0;
+        
+        if (lowerHeader.includes('grade')) {
+          score += 100;
+        } else if (lowerHeader.includes('final') || lowerHeader.includes('total')) {
+          score += 80;
+        } else if (lowerHeader.includes('exam') || lowerHeader.includes('mark')) {
+          score += 60;
+        }
+        
+        if (lowerHeader.includes('ca') || lowerHeader.includes('cw') || lowerHeader.includes('status') || lowerHeader.includes('remark')) {
+          score -= 150;
+        }
+        
+        // Add score based on actual cell values in this column for all students
+        let gradeMatches = 0;
+        let numberMatches = 0;
+        let filledCount = 0;
+        
+        finalStudents.forEach(student => {
+          const val = student.grades[modName] || (student.marks[modName] !== undefined && student.marks[modName] !== 0 ? student.marks[modName].toString() : "");
+          if (val) {
+            filledCount++;
+            if (GRADE_REGEX.test(val) && !/^(pass|fail|ab)$/i.test(val)) {
+              gradeMatches++;
+            } else if (!isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+              numberMatches++;
+            }
+          }
+        });
+        
+        if (filledCount > 0) {
+          score += (gradeMatches / filledCount) * 50;
+          score += (numberMatches / filledCount) * 30;
+        }
+        
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = idx;
+        }
+      });
+      
+      const bestModuleName = finalModules[bestIdx];
+      finalModules = [bestModuleName];
+      
+      finalStudents.forEach(student => {
+        const studentMark = student.marks[bestModuleName] !== undefined ? student.marks[bestModuleName] : 0;
+        const studentGrade = student.grades[bestModuleName] || null;
+        
+        student.marks = { [bestModuleName]: studentMark };
+        student.grades = { [bestModuleName]: studentGrade };
+      });
+    }
+  }
+  
   return {
-    modules: Array.from(allModulesSet),
-    students: allStudents
+    modules: finalModules,
+    students: finalStudents
   };
 }
 

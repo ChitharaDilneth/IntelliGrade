@@ -528,9 +528,9 @@ function handleFiles(files) {
     incomingFiles.push(file);
   }
 
-  // Add files to accumulatedFiles if they don't already exist by name
+  // Add files to accumulatedFiles if they don't already exist by name and size
   incomingFiles.forEach(file => {
-    const exists = accumulatedFiles.some(f => f.name === file.name);
+    const exists = accumulatedFiles.some(f => f.name === file.name && f.size === file.size);
     if (!exists) {
       accumulatedFiles.push(file);
     } else {
@@ -777,8 +777,16 @@ async function uploadFiles(files) {
         throw new Error(data.error || `Failed to parse "${file.name}"`);
       }
 
-      // Merge results
-      data.modules.forEach(mod => allModulesSet.add(mod));
+      // Merge results case-insensitively
+      data.modules.forEach(mod => {
+        let existingMod = Array.from(allModulesSet).find(m => m.toUpperCase() === mod.toUpperCase());
+        if (existingMod) {
+          mod = existingMod;
+        } else {
+          allModulesSet.add(mod);
+        }
+      });
+
       data.students.forEach(student => {
         const regNum = student.registrationNumber.toUpperCase();
         if (!combinedStudentsMap[regNum]) {
@@ -792,9 +800,18 @@ async function uploadFiles(files) {
         if (student.studentName && !combinedStudentsMap[regNum].studentName) {
           combinedStudentsMap[regNum].studentName = student.studentName;
         }
-        Object.assign(combinedStudentsMap[regNum].marks, student.marks || {});
+        
+        // Merge marks and grades case-insensitively
+        Object.keys(student.marks || {}).forEach(mod => {
+          let existingMod = Array.from(allModulesSet).find(m => m.toUpperCase() === mod.toUpperCase()) || mod;
+          combinedStudentsMap[regNum].marks[existingMod] = student.marks[mod];
+        });
+
         if (student.grades) {
-          Object.assign(combinedStudentsMap[regNum].grades, student.grades);
+          Object.keys(student.grades).forEach(mod => {
+            let existingMod = Array.from(allModulesSet).find(m => m.toUpperCase() === mod.toUpperCase()) || mod;
+            combinedStudentsMap[regNum].grades[existingMod] = student.grades[mod];
+          });
         }
       });
       totalProcessed++;
