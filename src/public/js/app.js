@@ -26,9 +26,9 @@ const TRANSLATIONS = {
     btn_reset_scale: 'Reset to Default Scale',
     btn_save_scale: 'Confirm Grading Scale',
     // Stats
-    stat_total_students: 'Total Students',
-    stat_passed_students: 'Passed Students (Pass)',
-    stat_failed_students: 'Failed Students (Fail)',
+    stat_total_students: 'Total Count',
+    stat_passed_students: 'All Module Pass Count',
+    stat_failed_students: 'At Least One Module Fail Count',
     // Analytics
     gpa_distribution: 'GPA Distribution (GPA Ranges)',
     performance_levels: 'Special Performance Levels',
@@ -112,9 +112,9 @@ const TRANSLATIONS = {
     btn_reset_scale: 'Default Scale එකට සකසන්න',
     btn_save_scale: 'Grading Scale එක තහවුරු කරන්න',
     // Stats
-    stat_total_students: 'මුළු සිසුන් ගණන',
-    stat_passed_students: 'සමත් වූ සිසුන් (Pass)',
-    stat_failed_students: 'අසමත් වූ සිසුන් (Fail)',
+    stat_total_students: 'මුළු සිසුන් ගණන (Total Count)',
+    stat_passed_students: 'සියලුම විෂයන් සමත් සිසුන් ගණන (All Module Pass Count)',
+    stat_failed_students: 'අවම වශයෙන් එක් විෂයක් හෝ අසමත් සිසුන් ගණන (At Least One Module Fail Count)',
     // Analytics
     gpa_distribution: 'GPA ව්‍යාප්තිය (GPA Ranges)',
     performance_levels: 'විශේෂ කාර්ය සාධන මට්ටම්',
@@ -198,9 +198,9 @@ const TRANSLATIONS = {
     btn_reset_scale: 'Default Scale ஆக மீட்டமைக்கவும்',
     btn_save_scale: 'Grading Scale உறுதிப்படுத்தவும்',
     // Stats
-    stat_total_students: 'மொத்த மாணவர்கள்',
-    stat_passed_students: 'தேர்ச்சி பெற்ற மாணவர்கள்',
-    stat_failed_students: 'தோல்வியுற்ற மாணவர்கள்',
+    stat_total_students: 'மொத்த மாணவர்கள் (Total Count)',
+    stat_passed_students: 'அனைத்து பாடங்களிலும் தேர்ச்சி பெற்றவர்கள் (All Module Pass Count)',
+    stat_failed_students: 'குறைந்தது ஒரு பாடத்தில் தோல்வியுற்றவர்கள் (At Least One Module Fail Count)',
     // Analytics
     gpa_distribution: 'GPA விநியோகம் (GPA வரம்புகள்)',
     performance_levels: 'சிறப்பு செயல்திறன் நிலைகள்',
@@ -983,7 +983,7 @@ function updateDashboardStats(students) {
   const total = students.length;
   
   // 1. Pass vs Fail count: Fail is C- or lower (inclusive of C-), Pass is C or higher for all subjects
-  const failGrades = ['C-', 'D+', 'D', 'E', 'F'];
+  const failGrades = ['C-', 'D+', 'D', 'E', 'F', 'FAIL'];
   let passedCount = 0;
   let failedCount = 0;
   

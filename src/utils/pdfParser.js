@@ -297,10 +297,12 @@ function parseStructuredText(text) {
       const row = grid[r];
       const possibleModules = sub.resultColIndices.map(c => row[c] || "").map(m => m.trim());
       
-      // Header labels should be text, non-numeric, and not grades
-      const allValidLabels = possibleModules.every(m => m !== "" && isNaN(parseFloat(m)) && !GRADE_REGEX.test(m));
-      if (allValidLabels) {
-        modules = possibleModules.map(m => m.toUpperCase());
+      // Header labels should be text, non-numeric, and not grades. Allow empty cells if at least one cell has a valid text label.
+      const hasSomeValidLabels = possibleModules.some(m => m !== "" && isNaN(parseFloat(m)) && !GRADE_REGEX.test(m));
+      const hasNoInvalidLabels = possibleModules.every(m => m === "" || (isNaN(parseFloat(m)) && !GRADE_REGEX.test(m)));
+      
+      if (hasSomeValidLabels && hasNoInvalidLabels) {
+        modules = possibleModules.map((m, idx) => m !== "" ? m.toUpperCase() : `Module ${idx + 1}`);
         break;
       }
     }
@@ -355,10 +357,44 @@ function parseStructuredText(text) {
   // If the parsed file has multiple results columns, check if it's a single subject sheet with multiple component columns
   if (finalModules.length > 1) {
     const componentKeywords = ['ca', 'cw', 'ass', 'status', 'remark', 'grade', 'exam', 'total', 'final', 'internal', 'external', 'mark', 'results'];
-    const isSingleSubjectComponentSheet = finalModules.some(m => {
+    let isSingleSubjectComponentSheet = finalModules.some(m => {
       const lower = m.toLowerCase();
       return componentKeywords.some(kw => lower.includes(kw));
     });
+    
+    // Scrutinize fallback names (e.g. Module 1, 2, 3) to see if one has grades and another has numeric marks
+    const hasFallbackNames = finalModules.every(m => /^Module \d+$/i.test(m));
+    if (!isSingleSubjectComponentSheet && hasFallbackNames) {
+      let hasGradesCol = false;
+      let hasMarksCol = false;
+      
+      finalModules.forEach(modName => {
+        let gradeMatches = 0;
+        let numberMatches = 0;
+        let filledCount = 0;
+        
+        finalStudents.forEach(student => {
+          const val = student.grades[modName] || (student.marks[modName] !== undefined && student.marks[modName] !== 0 ? student.marks[modName].toString() : "");
+          if (val) {
+            filledCount++;
+            if (GRADE_REGEX.test(val) && !/^(pass|fail|ab)$/i.test(val)) {
+              gradeMatches++;
+            } else if (!isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+              numberMatches++;
+            }
+          }
+        });
+        
+        if (filledCount > 0) {
+          if (gradeMatches / filledCount > 0.5) hasGradesCol = true;
+          if (numberMatches / filledCount > 0.5) hasMarksCol = true;
+        }
+      });
+      
+      if (hasGradesCol && hasMarksCol) {
+        isSingleSubjectComponentSheet = true;
+      }
+    }
     
     if (isSingleSubjectComponentSheet) {
       // Find the single best column index/module
